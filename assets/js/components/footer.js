@@ -25,7 +25,7 @@ export function renderFooter() {
                     <div class="text-xs text-google-textLightSecondary dark:text-google-textDarkSecondary space-y-1 pt-2">
                         <p><strong class="text-google-textLightPrimary dark:text-google-textDarkPrimary">Entity:</strong> Sole Proprietorship</p>
                         <p><strong class="text-google-textLightPrimary dark:text-google-textDarkPrimary">GSTIN:</strong> 21LHHPK7834B1ZF</p>
-                        <p><strong class="text-google-textLightPrimary dark:text-google-textDarkPrimary">Address:</strong> Anandapur, Keonjhar, Odisha 758022, India</p>
+                        <p><strong class="text-google-textLightPrimary dark:text-google-textDarkPrimary">Address:</strong> Anandapur, Kendujhar, Odisha 758022, India</p>
                     </div>
                 </div>
 
@@ -56,6 +56,7 @@ export function renderFooter() {
                         <li><a href="hiring.html" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Careers & Hiring</a></li>
                         <li><a href="privacy.html" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Privacy Policy</a></li>
                         <li><a href="terms.html" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Terms of Service</a></li>
+                        <li><a href="refund.html" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Refund & Cancellation</a></li>
                         <li><a href="mailto:legal@eduviskar.com" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Legal Inquiry Desk</a></li>
                     </ul>
                 </div>
