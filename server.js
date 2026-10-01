@@ -301,6 +301,13 @@ const server = http.createServer(async (req, res) => {
     const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = urlObj.pathname;
 
+    
+    if (pathname === '/api/version' && req.method === 'GET') {
+        const version = process.env.APP_VERSION || '1.0.0';
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ version }));
+    }
+
     if (pathname === '/api/hiring/admin/login' && req.method === 'POST') {
         try {
             const data = await parseJsonBody(req);
@@ -550,6 +557,10 @@ const server = http.createServer(async (req, res) => {
         }
     });
 });
+
+
+const appVersion = process.env.APP_VERSION || '1.0.0';
+console.log(`Running version ${appVersion}`);
 
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

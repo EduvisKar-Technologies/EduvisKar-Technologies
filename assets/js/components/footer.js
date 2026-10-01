@@ -2,9 +2,22 @@
  * Footer Component
  * Renders the global multi-column corporate footer dynamically
  */
-export function renderFooter() {
+export async function renderFooter() {
     const footerContainer = document.getElementById('site-footer');
     if (!footerContainer) return;
+
+    let appVersion = '1.0.0';
+    try {
+        const response = await fetch('/api/version');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.version) {
+                appVersion = data.version;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to fetch app version:', e);
+    }
 
     footerContainer.className = "bg-google-bgLight dark:bg-google-bgDark border-t border-google-borderLight dark:border-google-borderDark py-16 transition-colors duration-300";
     footerContainer.innerHTML = `
@@ -90,7 +103,7 @@ export function renderFooter() {
 
             <!-- Bottom Sub-Footer -->
             <div class="pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-google-textLightSecondary dark:text-google-textDarkSecondary">
-                <p>&copy; 2026 EduvisKar Technologies. All rights reserved.</p>
+                <p>&copy; 2026 EduvisKar Technologies. All rights reserved. <span class="ml-2 opacity-75">v${appVersion}</span></p>
                 <div class="flex items-center gap-4 flex-wrap justify-center sm:justify-end">
                     <a href="https://www.facebook.com/eduviskartechnologies" target="_blank" rel="noopener noreferrer" aria-label="Facebook" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors">Facebook</a>
                     <span class="select-none">&bull;</span>

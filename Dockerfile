@@ -13,6 +13,9 @@ RUN npm ci --omit=dev
 # Copy application source code
 COPY . .
 
+ARG APP_VERSION
+ENV APP_VERSION=$APP_VERSION
+
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=8081
