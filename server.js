@@ -5,7 +5,6 @@ const { Pool } = require('pg');
 const axios = require('axios');
 const path = require('path');
 const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
 
 function loadEnvFiles() {
     const files = ['.env', '.env.production'];
@@ -52,33 +51,7 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, 'hiring.db');
-const db = new DatabaseSync(dbPath);
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS candidates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        phone TEXT,
-        position TEXT NOT NULL,
-        experience_years TEXT,
-        github_url TEXT,
-        linkedin_url TEXT,
-        portfolio_url TEXT,
-        social_media_url TEXT,
-        cover_letter TEXT,
-        resume_filename TEXT,
-        resume_mimetype TEXT,
-        resume_blob BLOB,
-        status TEXT DEFAULT 'Pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-`);
-
-try { db.exec(`ALTER TABLE candidates ADD COLUMN github_url TEXT`); } catch (_) {}
-try { db.exec(`ALTER TABLE candidates ADD COLUMN linkedin_url TEXT`); } catch (_) {}
-try { db.exec(`ALTER TABLE candidates ADD COLUMN social_media_url TEXT`); } catch (_) {}
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -271,7 +244,7 @@ expressApp.post('/api/pay/webhook', async (req, res) => {
     const phonepeState = statusResponse.data.state;
     const finalStatus = phonepeState === 'COMPLETED' ? 'SUCCESS' : 'FAILED';
 
-    const tx = await pool.query('UPDATE gateway_payment_intents SET status =  WHERE transaction_id =  RETURNING *', [finalStatus, merchantOrderId]);
+    const tx = await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2 RETURNING *', [finalStatus, merchantOrderId]);
     
     if (tx.rowCount > 0 && tx.rows[0].webhook_url) {
       await axios.post(tx.rows[0].webhook_url, { 
@@ -388,20 +361,18 @@ const server = http.createServer(async (req, res) => {
                 resumeBuffer = Buffer.from(resume_base64, 'base64');
             }
 
-            const stmt = db.prepare(`
+            await pool.query(`
                 INSERT INTO candidates 
                 (full_name, email, phone, position, experience_years, github_url, linkedin_url, portfolio_url, social_media_url, cover_letter, resume_filename, resume_mimetype, resume_blob)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            stmt.run(
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            `, [
                 cleanName, cleanEmail, cleanPhone, cleanPosition, cleanExp, cleanGithub, 
                 cleanLinkedin, cleanPortfolio, cleanSocial, cleanCover,
                 // FIX: Restored empty string
                 (resume_filename || '').trim().slice(0, 150),
                 (resume_mimetype || 'application/pdf').trim().slice(0, 50),
                 resumeBuffer
-            );
+            ]);
 
             res.writeHead(201, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ success: true, message: 'Application submitted successfully!' }));
@@ -417,7 +388,7 @@ const server = http.createServer(async (req, res) => {
             return res.end(JSON.stringify({ success: false, error: 'Unauthorized. Invalid admin passcode.' }));
         }
         try {
-            const stmt = db.prepare(`
+            const result = await pool.query(`
                 SELECT 
                     id, full_name, email, phone, position, experience_years, 
                     github_url, linkedin_url, portfolio_url, social_media_url, 
@@ -425,7 +396,7 @@ const server = http.createServer(async (req, res) => {
                     (CASE WHEN resume_blob IS NOT NULL THEN 1 ELSE 0 END) AS has_resume
                 FROM candidates ORDER BY id DESC
             `);
-            const candidates = stmt.all();
+            const candidates = result.rows;
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ success: true, data: candidates }));
         } catch (err) {
@@ -441,8 +412,8 @@ const server = http.createServer(async (req, res) => {
         }
         try {
             const id = pathname.split('/')[4];
-            const stmt = db.prepare(`SELECT resume_filename, resume_mimetype, resume_blob FROM candidates WHERE id = ?`);
-            const row = stmt.get(id);
+            const result = await pool.query(`SELECT resume_filename, resume_mimetype, resume_blob FROM candidates WHERE id = $1`, [id]);
+            const row = result.rows[0];
             if (!row || !row.resume_blob) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: false, error: 'Resume not found for this candidate.' }));
@@ -468,8 +439,7 @@ const server = http.createServer(async (req, res) => {
         }
         try {
             const id = pathname.split('/')[4];
-            const stmt = db.prepare(`DELETE FROM candidates WHERE id = ?`);
-            stmt.run(id);
+            await pool.query(`DELETE FROM candidates WHERE id = $1`, [id]);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ success: true, message: 'Candidate deleted successfully.' }));
         } catch (err) {
