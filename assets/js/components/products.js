@@ -1,28 +1,30 @@
 /**
  * Products Component
- * Renders core platform cards for EK Labs and EduvisKar Live
+ * Renders core platform cards for Staaks and EduvisKar Live
  */
 export const productsData = [
-    {
-        title: 'EK Labs',
-        description: 'We help enterprises build custom websites, mobile solutions, and cloud software with clear pricing and fast delivery.',
-        icon: '<img src="assets/img/logo_labs_light.svg" class="w-16 h-16 object-contain block dark:hidden" alt="EK Labs"><img src="assets/img/logo_labs_dark.svg" class="w-16 h-16 object-contain hidden dark:block" alt="EK Labs">',
-        link: 'https://labs.eduviskar.com',
-        color: '',
-        bg: 'bg-transparent'
-    },
-    {
-        title: 'EduvisKar Live',
-        description: 'An online learning cum booking platform with live video classrooms for online tuitions, and tutor matching for students.',
-        icon: '<img src="assets/img/eduviskar_live_logo.svg" class="w-16 h-16 object-contain" alt="EduvisKar Live">',
-        link: 'https://live.eduviskar.com',
-        color: '',
-        bg: 'bg-transparent'
-    }
+  {
+    title: "Staaks",
+    description:
+      "We help enterprises build custom websites, mobile solutions, and cloud software with clear pricing and fast delivery.",
+    icon: '<img src="assets/img/logo_labs_light.svg" class="w-16 h-16 object-contain block dark:hidden" alt="Staaks"><img src="assets/img/logo_labs_dark.svg" class="w-16 h-16 object-contain hidden dark:block" alt="Staaks">',
+    link: "https://labs.eduviskar.com",
+    color: "",
+    bg: "bg-transparent",
+  },
+  {
+    title: "EduvisKar Live",
+    description:
+      "An online learning cum booking platform with live video classrooms for online tuitions, and tutor matching for students.",
+    icon: '<img src="assets/img/eduviskar_live_logo.svg" class="w-16 h-16 object-contain" alt="EduvisKar Live">',
+    link: "https://live.eduviskar.com",
+    color: "",
+    bg: "bg-transparent",
+  },
 ];
 
 export function createMaterialCard(p) {
-    return `
+  return `
         <a href="${p.link}" target="_blank" rel="noopener noreferrer" class="group block p-8 bg-google-bgLight dark:bg-google-bgDark rounded-2xl border border-google-borderLight dark:border-google-borderDark hover:shadow-lg transition-all duration-300">
             <div class="w-16 h-16 rounded-full ${p.bg} flex items-center justify-center mb-6 transition-colors">
                 <div class="${p.color}">
@@ -44,8 +46,8 @@ export function createMaterialCard(p) {
 }
 
 export function renderProducts() {
-    const grid = document.getElementById('products-grid');
-    if (!grid) return;
+  const grid = document.getElementById("products-grid");
+  if (!grid) return;
 
-    grid.innerHTML = productsData.map(p => createMaterialCard(p)).join('');
+  grid.innerHTML = productsData.map((p) => createMaterialCard(p)).join("");
 }

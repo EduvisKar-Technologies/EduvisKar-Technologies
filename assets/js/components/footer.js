@@ -3,24 +3,25 @@
  * Renders the global multi-column corporate footer dynamically
  */
 export async function renderFooter() {
-    const footerContainer = document.getElementById('site-footer');
-    if (!footerContainer) return;
+  const footerContainer = document.getElementById("site-footer");
+  if (!footerContainer) return;
 
-    let appVersion = '1.0.0';
-    try {
-        const response = await fetch('/api/version');
-        if (response.ok) {
-            const data = await response.json();
-            if (data.version) {
-                appVersion = data.version;
-            }
-        }
-    } catch (e) {
-        console.error('Failed to fetch app version:', e);
+  let appVersion = "1.0.0";
+  try {
+    const response = await fetch("/api/version");
+    if (response.ok) {
+      const data = await response.json();
+      if (data.version) {
+        appVersion = data.version;
+      }
     }
+  } catch (e) {
+    console.error("Failed to fetch app version:", e);
+  }
 
-    footerContainer.className = "bg-google-bgLight dark:bg-google-bgDark border-t border-google-borderLight dark:border-google-borderDark py-16 transition-colors duration-300";
-    footerContainer.innerHTML = `
+  footerContainer.className =
+    "bg-google-bgLight dark:bg-google-bgDark border-t border-google-borderLight dark:border-google-borderDark py-16 transition-colors duration-300";
+  footerContainer.innerHTML = `
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-10 pb-12 border-b border-google-borderLight dark:border-google-borderDark">
                 
@@ -54,9 +55,9 @@ export async function renderFooter() {
                         </li>
                         <li>
                             <a href="https://labs.eduviskar.com" target="_blank" rel="noopener noreferrer" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors inline-flex items-center gap-1.5">
-                                <img src="assets/img/logo_labs_light.svg" class="w-4 h-4 object-contain block dark:hidden" alt="EK Labs">
-                                <img src="assets/img/logo_labs_dark.svg" class="w-4 h-4 object-contain hidden dark:block" alt="EK Labs">
-                                EK Labs
+                                <img src="assets/img/logo_labs_light.svg" class="w-4 h-4 object-contain block dark:hidden" alt="Staaks">
+                                <img src="assets/img/logo_labs_dark.svg" class="w-4 h-4 object-contain hidden dark:block" alt="Staaks">
+                                Staaks
                             </a>
                         </li>
                     </ul>
