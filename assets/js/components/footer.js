@@ -54,7 +54,7 @@ export async function renderFooter() {
                             </a>
                         </li>
                         <li>
-                            <a href="https://labs.eduviskar.com" target="_blank" rel="noopener noreferrer" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors inline-flex items-center gap-1.5">
+                            <a href="https://staaks.eduviskar.com" target="_blank" rel="noopener noreferrer" class="hover:text-google-blue dark:hover:text-google-blueDark transition-colors inline-flex items-center gap-1.5">
                                 <img src="assets/img/logo_labs_light.svg" class="w-4 h-4 object-contain block dark:hidden" alt="Staaks">
                                 <img src="assets/img/logo_labs_dark.svg" class="w-4 h-4 object-contain hidden dark:block" alt="Staaks">
                                 Staaks

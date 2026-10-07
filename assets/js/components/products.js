@@ -8,7 +8,7 @@ export const productsData = [
     description:
       "We help enterprises build custom websites, mobile solutions, and cloud software with clear pricing and fast delivery.",
     icon: '<img src="assets/img/logo_labs_light.svg" class="w-16 h-16 object-contain block dark:hidden" alt="Staaks"><img src="assets/img/logo_labs_dark.svg" class="w-16 h-16 object-contain hidden dark:block" alt="Staaks">',
-    link: "https://labs.eduviskar.com",
+    link: "https://staaks.eduviskar.com",
     color: "",
     bg: "bg-transparent",
   },
