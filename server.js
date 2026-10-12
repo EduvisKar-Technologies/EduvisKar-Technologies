@@ -327,6 +327,17 @@ const server = http.createServer(async (req, res) => {
                 return res.end(JSON.stringify({ success: false, error: 'Full name, email, and position are required fields.' }));
             }
 
+            if (!resume_base64 || !resume_filename) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: 'Resume upload is required.' }));
+            }
+
+            const cleanResumeFilename = resume_filename.trim();
+            if (!cleanResumeFilename.toLowerCase().endsWith('.pdf')) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: 'Only PDF files (.pdf) are allowed. DOC, DOCX and other formats are not permitted.' }));
+            }
+
             const cleanEmail = email.trim();
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -356,9 +367,14 @@ const server = http.createServer(async (req, res) => {
                 }
             }
 
-            let resumeBuffer = null;
-            if (resume_base64) {
-                resumeBuffer = Buffer.from(resume_base64, 'base64');
+            let resumeBuffer = Buffer.from(resume_base64, 'base64');
+            if (resumeBuffer.length > 10 * 1024 * 1024) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: 'Resume file size exceeds the 10MB limit.' }));
+            }
+            if (resumeBuffer.slice(0, 4).toString() !== '%PDF') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: false, error: 'The uploaded file is not a valid PDF document.' }));
             }
 
             await pool.query(`
