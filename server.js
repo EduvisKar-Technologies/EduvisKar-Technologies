@@ -193,10 +193,33 @@ expressApp.post('/api/pay/initiate', async (req, res) => {
 });
 
 expressApp.all('/api/pay/callback', async (req, res) => {
-  const body = req.body || {}; const query = req.query || {}; const merchantOrderId = query.merchantOrderId || body.merchantOrderId || query.transactionId || body.transactionId;
-  if (!merchantOrderId) return res.status(400).send('Missing Order ID. DEBUG: ' + JSON.stringify({ body, query }));
+  const body = req.body || {};
+  const query = req.query || {};
+  const merchantOrderId = query.merchantOrderId || body.merchantOrderId || query.transactionId || body.transactionId;
+  
+  if (!merchantOrderId) {
+    return res.status(400).send('Missing Order ID. DEBUG: ' + JSON.stringify({ body, query }));
+  }
+
+  // 1. Fetch transaction intent first so we ALWAYS know return_url and webhook_url
+  let tx;
   try {
-    const params = new URLSearchParams(); params.append('client_id', PHONEPE_CLIENT_ID); params.append('client_secret', PHONEPE_CLIENT_SECRET); params.append('client_version', '1'); params.append('grant_type', 'client_credentials');
+    const txResult = await pool.query('SELECT * FROM gateway_payment_intents WHERE transaction_id = $1', [merchantOrderId]);
+    if (txResult.rowCount > 0) {
+      tx = txResult.rows[0];
+    }
+  } catch (dbErr) {
+    console.error("DB_LOOKUP_ERR:", dbErr.message);
+  }
+
+  // 2. Query PhonePe for the status safely (default to CANCELLED if user aborted/cancelled)
+  let finalStatus = 'CANCELLED';
+  try {
+    const params = new URLSearchParams();
+    params.append('client_id', PHONEPE_CLIENT_ID);
+    params.append('client_secret', PHONEPE_CLIENT_SECRET);
+    params.append('client_version', '1');
+    params.append('grant_type', 'client_credentials');
     const oauthBase = PHONEPE_BASE_URL.includes('sandbox') ? PHONEPE_BASE_URL : 'https://api.phonepe.com/apis/identity-manager';
     const tokenResponse = await axios.post(`${oauthBase}/v1/oauth/token`, 
       params,
@@ -204,17 +227,90 @@ expressApp.all('/api/pay/callback', async (req, res) => {
     );
     const accessToken = tokenResponse.data.access_token;
     const statusResponse = await axios.get(`${PHONEPE_BASE_URL}/checkout/v2/order/${merchantOrderId}/status`, {
-      headers: { 'Authorization': `O-Bearer ${accessToken}` }
+      headers: { 'Authorization': `O-Bearer ${accessToken}` },
+      validateStatus: () => true
     });
-    const phonepeState = statusResponse.data.state;
-    const finalStatus = phonepeState === 'COMPLETED' ? 'SUCCESS' : 'FAILED';
-    const tx = await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2 RETURNING *', [finalStatus, merchantOrderId]);
-    if (tx.rowCount === 0) return res.status(400).send('Transaction not found');
-    await axios.post(tx.rows[0].webhook_url, { transactionId: merchantOrderId, status: finalStatus, userId: tx.rows[0].user_id, amount: parseFloat(tx.rows[0].amount) }, { headers: { 'x-api-secret': API_SECRET } });
-    
-    const delimiter = tx.rows[0].return_url.includes('?') ? '&' : '?';
-    res.redirect(`${tx.rows[0].return_url}${delimiter}status=${finalStatus}&txnId=${merchantOrderId}`);
-  } catch (err) { console.error("CALLBACK_ERR:", err.response ? err.response.data : err.message); res.status(500).send("Callback Verification Error: " + (err.response ? JSON.stringify(err.response.data) : err.message)); }
+
+    if (statusResponse.status === 200 && statusResponse.data) {
+      const phonepeState = statusResponse.data.state || statusResponse.data.status;
+      if (phonepeState === 'COMPLETED' || phonepeState === 'SUCCESS') {
+        finalStatus = 'SUCCESS';
+      } else if (phonepeState === 'PENDING') {
+        finalStatus = 'PENDING';
+      } else if (phonepeState === 'CANCELLED' || phonepeState === 'USER_CANCELLED' || phonepeState === 'USER_DROPPED') {
+        finalStatus = 'CANCELLED';
+      } else {
+        finalStatus = 'FAILED';
+      }
+    } else {
+      console.warn("PHONEPE_ORDER_STATUS_NON_200:", statusResponse.status, statusResponse.data);
+      finalStatus = 'CANCELLED';
+    }
+  } catch (err) {
+    console.warn("CALLBACK_PHONEPE_CHECK_EXCEPTION (handling gracefully):", err.message);
+    finalStatus = 'CANCELLED';
+  }
+
+  // 3. Update database and invoke webhook if successful
+  if (tx) {
+    try {
+      await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2', [finalStatus, merchantOrderId]);
+      if (finalStatus === 'SUCCESS' && tx.webhook_url) {
+        await axios.post(tx.webhook_url, {
+          transactionId: merchantOrderId,
+          status: finalStatus,
+          userId: tx.user_id,
+          amount: parseFloat(tx.amount)
+        }, { headers: { 'x-api-secret': API_SECRET } }).catch(e => console.error('WEBHOOK_FORWARD_ERR:', e.message));
+      }
+    } catch (updateErr) {
+      console.error("GATEWAY_UPDATE_OR_WEBHOOK_ERR:", updateErr.message);
+    }
+
+    // 4. Redirect user back to the application return URL with both status and code parameters
+    if (tx.return_url) {
+      try {
+        const url = new URL(tx.return_url);
+        url.searchParams.set('status', finalStatus);
+        url.searchParams.set('code', finalStatus);
+        url.searchParams.set('txnId', merchantOrderId);
+        if (!url.searchParams.has('transactionId')) {
+          url.searchParams.set('transactionId', merchantOrderId);
+        }
+        return res.redirect(url.toString());
+      } catch (urlErr) {
+        const delimiter = tx.return_url.includes('?') ? '&' : '?';
+        return res.redirect(`${tx.return_url}${delimiter}status=${finalStatus}&code=${finalStatus}&txnId=${merchantOrderId}&transactionId=${merchantOrderId}`);
+      }
+    }
+  }
+
+  // 5. Fallback response if transaction intent is not found in database
+  return res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Payment Status</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; }
+        .card { background: #1e293b; padding: 2.5rem; border-radius: 1rem; text-align: center; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.75rem; color: ${finalStatus === 'SUCCESS' ? '#4ade80' : '#fb923c'}; }
+        p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
+        a { display: inline-block; background: #2563eb; color: #fff; text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 500; }
+        a:hover { background: #1d4ed8; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>Payment ${finalStatus === 'CANCELLED' ? 'Cancelled' : finalStatus}</h1>
+        <p>Your payment session was ${finalStatus.toLowerCase()}. No funds have been debited from your account.</p>
+        <a href="https://staaks.eduviskar.com">Return to Dashboard</a>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 
@@ -240,9 +336,12 @@ expressApp.post('/api/pay/webhook', async (req, res) => {
     const oauthBase = PHONEPE_BASE_URL.includes('sandbox') ? PHONEPE_BASE_URL : 'https://api.phonepe.com/apis/identity-manager';
     const tokenResponse = await axios.post(`${oauthBase}/v1/oauth/token`, params, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
     const accessToken = tokenResponse.data.access_token;
-    const statusResponse = await axios.get(`${PHONEPE_BASE_URL}/checkout/v2/order/${merchantOrderId}/status`, { headers: { 'Authorization': `O-Bearer ${accessToken}` } });
-    const phonepeState = statusResponse.data.state;
-    const finalStatus = phonepeState === 'COMPLETED' ? 'SUCCESS' : 'FAILED';
+    const statusResponse = await axios.get(`${PHONEPE_BASE_URL}/checkout/v2/order/${merchantOrderId}/status`, { 
+      headers: { 'Authorization': `O-Bearer ${accessToken}` },
+      validateStatus: () => true
+    });
+    const phonepeState = statusResponse.data?.state || statusResponse.data?.status;
+    const finalStatus = (statusResponse.status === 200 && (phonepeState === 'COMPLETED' || phonepeState === 'SUCCESS')) ? 'SUCCESS' : 'FAILED';
 
     const tx = await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2 RETURNING *', [finalStatus, merchantOrderId]);
     
