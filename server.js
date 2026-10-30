@@ -313,7 +313,73 @@ expressApp.all('/api/pay/callback', async (req, res) => {
   `);
 });
 
+expressApp.get('/api/pay/status', async (req, res) => {
+  if (req.headers['x-api-secret'] !== API_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const id = req.query.transactionId || req.query.userId || req.query.merchantOrderId;
+  if (!id) {
+    return res.status(400).json({ error: 'Missing transactionId parameter' });
+  }
 
+  try {
+    const tx = await pool.query(
+      `SELECT transaction_id, user_id, source_app, status, amount, created_at 
+       FROM gateway_payment_intents 
+       WHERE transaction_id = $1 OR user_id = $1 
+       ORDER BY created_at DESC LIMIT 1`,
+      [id]
+    );
+    if (tx.rowCount === 0) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    const row = tx.rows[0];
+
+    // If still pending, query PhonePe directly to get real-time status
+    if (row.status === 'PENDING') {
+      try {
+        const params = new URLSearchParams();
+        params.append('client_id', PHONEPE_CLIENT_ID);
+        params.append('client_secret', PHONEPE_CLIENT_SECRET);
+        params.append('client_version', '1');
+        params.append('grant_type', 'client_credentials');
+        const oauthBase = PHONEPE_BASE_URL.includes('sandbox') ? PHONEPE_BASE_URL : 'https://api.phonepe.com/apis/identity-manager';
+        const tokenResponse = await axios.post(`${oauthBase}/v1/oauth/token`, params, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+        const accessToken = tokenResponse.data.access_token;
+        const statusResponse = await axios.get(`${PHONEPE_BASE_URL}/checkout/v2/order/${row.transaction_id}/status`, {
+          headers: { 'Authorization': `O-Bearer ${accessToken}` },
+          validateStatus: () => true
+        });
+        if (statusResponse.status === 200 && statusResponse.data) {
+          const state = statusResponse.data.state || statusResponse.data.status;
+          if (state === 'COMPLETED' || state === 'SUCCESS') {
+            row.status = 'SUCCESS';
+            await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2', ['SUCCESS', row.transaction_id]);
+          } else if (state === 'CANCELLED' || state === 'USER_CANCELLED' || state === 'USER_DROPPED') {
+            row.status = 'CANCELLED';
+            await pool.query('UPDATE gateway_payment_intents SET status = $1 WHERE transaction_id = $2', ['CANCELLED', row.transaction_id]);
+          }
+        }
+      } catch (err) {
+        console.warn("LIVE_PHONEPE_CHECK_ERR:", err.message);
+      }
+    }
+
+    return res.json({
+      transactionId: row.transaction_id,
+      userId: row.user_id,
+      sourceApp: row.source_app,
+      status: row.status,
+      amount: parseFloat(row.amount),
+      createdAt: row.created_at
+    });
+  } catch (err) {
+    console.error("GATEWAY_STATUS_ERR:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 expressApp.post('/api/pay/webhook', async (req, res) => {
   try {
